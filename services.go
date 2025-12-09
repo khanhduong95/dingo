@@ -61,6 +61,34 @@ func (services Services) astContainerStruct() *ast.GenDecl {
 	}
 }
 
+func (services Services) astContainerStructWithMap(importMap ImportMap) *ast.GenDecl {
+	var containerFields []*ast.Field
+	for _, serviceName := range services.ServiceNames() {
+		service := services[serviceName]
+
+		containerFields = append(containerFields, &ast.Field{
+			Names: []*ast.Ident{
+				{Name: serviceName},
+			},
+			Type: service.ContainerFieldTypeWithMap(services, importMap),
+		})
+	}
+
+	return &ast.GenDecl{
+		Tok: token.TYPE,
+		Specs: []ast.Spec{
+			&ast.TypeSpec{
+				Name: newIdent("Container"),
+				Type: &ast.StructType{
+					Fields: &ast.FieldList{
+						List: containerFields,
+					},
+				},
+			},
+		},
+	}
+}
+
 func (services Services) astDefaultContainer() *ast.GenDecl {
 	return &ast.GenDecl{
 		Tok: token.VAR,

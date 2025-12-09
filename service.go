@@ -38,6 +38,19 @@ func (service *Service) ContainerFieldType(services Services) ast.Expr {
 	return service.astFunctionPrototype(services)
 }
 
+func (service *Service) ContainerFieldTypeWithMap(services Services, importMap ImportMap) ast.Expr {
+	scope := service.Scope
+	if scope == ScopeNotSet {
+		scope = ScopeContainer
+	}
+
+	if scope == ScopeContainer && len(service.Arguments) == 0 {
+		return newIdent(service.InterfaceOrLocalEntityPointerTypeWithMap(importMap))
+	}
+
+	return service.astFunctionPrototypeWithMap(services, importMap)
+}
+
 func (service *Service) InterfaceOrLocalEntityType(services Services, recurse bool) string {
 	localEntityType := service.Type.LocalEntityType()
 	if service.Interface != "" {
@@ -85,6 +98,41 @@ func (service *Service) Imports() map[string]string {
 	}
 
 	return imports
+}
+
+// InterfaceOrLocalEntityTypeWithMap returns the entity type using a resolved import map
+func (service *Service) InterfaceOrLocalEntityTypeWithMap(services Services, recurse bool, importMap ImportMap) string {
+	ty := service.Type
+	if service.Interface != "" {
+		ty = service.Interface
+	}
+
+	localEntityType := ty.LocalEntityTypeWithMap(importMap)
+
+	if len(service.Arguments) > 0 && recurse {
+		var args []string
+
+		for _, dep := range service.Returns.Dependencies() {
+			depType := services[dep].InterfaceOrLocalEntityTypeWithMap(services, false, importMap)
+			args = append(args, fmt.Sprintf("%s %s", dep, depType))
+		}
+
+		args = append(args, service.Arguments.GoArguments()...)
+
+		return fmt.Sprintf("func(%v) %s", strings.Join(args, ", "),
+			localEntityType)
+	}
+
+	return localEntityType
+}
+
+// InterfaceOrLocalEntityPointerTypeWithMap returns the pointer type using a resolved import map
+func (service *Service) InterfaceOrLocalEntityPointerTypeWithMap(importMap ImportMap) string {
+	if service.Interface != "" {
+		return service.Interface.LocalEntityTypeWithMap(importMap)
+	}
+
+	return service.Type.LocalEntityPointerTypeWithMap(importMap)
 }
 
 func (service *Service) SortedProperties() (sortedProperties []*Property) {
@@ -178,6 +226,46 @@ func (service *Service) astFunctionPrototype(services Services) *ast.FuncType {
 	}
 }
 
+func (service *Service) astFunctionPrototypeWithMap(services Services, importMap ImportMap) *ast.FuncType {
+	ty := Type(service.InterfaceOrLocalEntityTypeWithMap(services, true, importMap))
+	if ty.IsFunction() {
+		args, returns := ty.parseFunctionType()
+
+		return &ast.FuncType{
+			Params:  newFieldList(args),
+			Results: newFieldList(returns...),
+		}
+	}
+
+	return &ast.FuncType{
+		Params:  service.astAllArgumentsWithMap(services, importMap),
+		Results: newFieldList(string(ty)),
+	}
+}
+
+func (service *Service) astDependencyArgumentsWithMap(services Services, importMap ImportMap) *ast.FieldList {
+	funcParams := &ast.FieldList{
+		List: []*ast.Field{},
+	}
+
+	for _, dep := range service.Returns.DependencyNames() {
+		funcParams.List = append(funcParams.List, &ast.Field{
+			Type: newIdent(dep + " " + services[dep].InterfaceOrLocalEntityTypeWithMap(services, false, importMap)),
+		})
+	}
+
+	return funcParams
+}
+
+func (service *Service) astAllArgumentsWithMap(services Services, importMap ImportMap) *ast.FieldList {
+	deps := service.astDependencyArgumentsWithMap(services, importMap)
+	args := service.astArguments()
+
+	return &ast.FieldList{
+		List: append(deps.List, args.List...),
+	}
+}
+
 func (service *Service) astFunctionBody(file *File, services Services, name, serviceName string) *ast.BlockStmt {
 	if name != "" && service.Scope == ScopePrototype {
 		var arguments []string
@@ -206,7 +294,7 @@ func (service *Service) astFunctionBody(file *File, services Services, name, ser
 				Lhs: []ast.Expr{newIdent(serviceTempVariable)},
 				Rhs: []ast.Expr{
 					&ast.CompositeLit{
-						Type: newIdent(service.Type.CreateLocalEntityType()),
+						Type: newIdent(service.Type.CreateLocalEntityTypeWithMap(file.importMap)),
 					},
 				},
 			},
@@ -218,12 +306,18 @@ func (service *Service) astFunctionBody(file *File, services Services, name, ser
 			lhs = append(lhs, newIdent("err"))
 		}
 
+		// Perform substitutions with context awareness for package prefixes
+		substitutedReturns := service.Returns.performSubstitutions(file, services, name == "")
+		if file.importMap != nil {
+			substitutedReturns = service.Returns.replacePackagePrefixesWithContext(substitutedReturns, service.Type, file.importMap)
+		}
+
 		instantiation = []ast.Stmt{
 			&ast.AssignStmt{
 				Tok: token.DEFINE,
 				Lhs: lhs,
 				Rhs: []ast.Expr{
-					newIdent(service.Returns.performSubstitutions(file, services, name == "")),
+					newIdent(substitutedReturns),
 				},
 			},
 		}
@@ -244,10 +338,15 @@ func (service *Service) astFunctionBody(file *File, services Services, name, ser
 
 	// Properties
 	for _, property := range service.SortedProperties() {
+		substitutedValue := property.Value.performSubstitutions(file, services, name == "")
+		if file.importMap != nil {
+			substitutedValue = property.Value.replacePackagePrefixesWithContext(substitutedValue, service.Type, file.importMap)
+		}
+
 		instantiation = append(instantiation, &ast.AssignStmt{
 			Tok: token.ASSIGN,
 			Lhs: []ast.Expr{&ast.Ident{Name: serviceTempVariable + "." + property.Name}},
-			Rhs: []ast.Expr{&ast.Ident{Name: property.Value.performSubstitutions(file, services, name == "")}},
+			Rhs: []ast.Expr{&ast.Ident{Name: substitutedValue}},
 		})
 	}
 

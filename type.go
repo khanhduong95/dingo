@@ -66,6 +66,26 @@ func (ty Type) LocalPackageName() string {
 	return strings.Replace(lastPart, "-", "_", -1)
 }
 
+// LocalPackageNameWithMap returns the package name using a resolved import map
+func (ty Type) LocalPackageNameWithMap(importMap ImportMap) string {
+	if ty.IsFunction() {
+		return ""
+	}
+
+	packageName := ty.PackageName()
+	if packageName == "" {
+		return ""
+	}
+
+	// Check if we have a resolved name for this package
+	if resolvedName, ok := importMap[packageName]; ok {
+		return resolvedName
+	}
+
+	// Fallback to default behavior
+	return ty.LocalPackageName()
+}
+
 func (ty Type) EntityName() string {
 	if ty.IsFunction() {
 		return ty.String()
@@ -86,12 +106,37 @@ func (ty Type) LocalEntityName() string {
 	return strings.TrimLeft(name, ".")
 }
 
+// LocalEntityNameWithMap returns the entity name using a resolved import map
+func (ty Type) LocalEntityNameWithMap(importMap ImportMap) string {
+	if ty.IsFunction() {
+		return ty.String()
+	}
+
+	name := ty.LocalPackageNameWithMap(importMap) + "." + ty.EntityName()
+
+	return strings.TrimLeft(name, ".")
+}
+
 func (ty Type) LocalEntityType() string {
 	if ty.IsFunction() {
 		return ty.String()
 	}
 
 	name := ty.LocalEntityName()
+	if ty.IsPointer() {
+		name = "*" + name
+	}
+
+	return name
+}
+
+// LocalEntityTypeWithMap returns the entity type using a resolved import map
+func (ty Type) LocalEntityTypeWithMap(importMap ImportMap) string {
+	if ty.IsFunction() {
+		return ty.String()
+	}
+
+	name := ty.LocalEntityNameWithMap(importMap)
 	if ty.IsPointer() {
 		name = "*" + name
 	}
@@ -112,12 +157,40 @@ func (ty Type) CreateLocalEntityType() string {
 	return name
 }
 
+// CreateLocalEntityTypeWithMap returns the create syntax using a resolved import map
+func (ty Type) CreateLocalEntityTypeWithMap(importMap ImportMap) string {
+	if ty.IsFunction() {
+		return ty.String()
+	}
+
+	name := ty.LocalEntityNameWithMap(importMap)
+	if ty.IsPointer() {
+		name = "&" + name
+	}
+
+	return name
+}
+
 func (ty Type) LocalEntityPointerType() string {
 	if ty.IsFunction() {
 		return ty.String()
 	}
 
 	name := ty.LocalEntityName()
+	if !strings.HasPrefix(name, "*") {
+		name = "*" + name
+	}
+
+	return name
+}
+
+// LocalEntityPointerTypeWithMap returns the pointer type using a resolved import map
+func (ty Type) LocalEntityPointerTypeWithMap(importMap ImportMap) string {
+	if ty.IsFunction() {
+		return ty.String()
+	}
+
+	name := ty.LocalEntityNameWithMap(importMap)
 	if !strings.HasPrefix(name, "*") {
 		name = "*" + name
 	}
