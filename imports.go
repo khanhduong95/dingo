@@ -59,7 +59,6 @@ func CollectAndResolveImports(services Services) ImportMap {
 
 // resolveConflict generates unique names for conflicting packages
 func resolveConflict(packagePaths []string, baseShortName string, resolved ImportMap) ImportMap {
-	// Try to find a unique prefix for each conflicting package
 	for _, path := range packagePaths {
 		uniqueName := generateUniqueName(path, baseShortName, packagePaths)
 		resolved[path] = uniqueName
@@ -75,18 +74,14 @@ func generateUniqueName(packagePath string, baseShortName string, allPaths []str
 		return baseShortName
 	}
 
-	// Start from the parent directory and work backwards
 	for i := len(parts) - 2; i >= 0; i-- {
-		// Build name from current parent + base name
 		parentPart := sanitizePackageName(parts[i])
 		candidateName := parentPart + "_" + baseShortName
 
-		// Check if this name is unique among all conflicting paths
 		if isUniqueAmong(candidateName, packagePath, allPaths) {
 			return candidateName
 		}
 
-		// If still not unique, try adding more parent segments
 		if i > 0 {
 			grandParent := sanitizePackageName(parts[i-1])
 			candidateName = grandParent + "_" + parentPart + "_" + baseShortName
@@ -107,32 +102,26 @@ func isUniqueAmong(candidateName string, targetPath string, allPaths []string) b
 			continue
 		}
 
-		// Check if another path would also generate the same candidate name
 		parts := strings.Split(path, "/")
 		if len(parts) == 0 {
 			continue
 		}
 
-		// Simple check: if the candidate contains a parent dir from target
-		// it shouldn't match other paths with different parents
 		targetParts := strings.Split(targetPath, "/")
 		if len(targetParts) < 2 {
 			continue
 		}
 
-		// Extract the distinguishing part
 		targetParent := targetParts[len(targetParts)-2]
 		pathParent := ""
 		if len(parts) >= 2 {
 			pathParent = parts[len(parts)-2]
 		}
 
-		// If parents are different, we're good
 		if targetParent != pathParent && strings.Contains(candidateName, sanitizePackageName(targetParent)) {
 			continue
 		}
 
-		// Parents are the same, so this name wouldn't be unique
 		if targetParent == pathParent {
 			return false
 		}
@@ -143,9 +132,7 @@ func isUniqueAmong(candidateName string, targetPath string, allPaths []string) b
 
 // sanitizePackageName converts a path segment into a valid Go identifier
 func sanitizePackageName(name string) string {
-	// Replace hyphens with underscores
 	name = strings.ReplaceAll(name, "-", "_")
-	// Remove any other invalid characters
 	name = strings.Map(func(r rune) rune {
 		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
 			return r
