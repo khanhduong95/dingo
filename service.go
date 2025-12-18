@@ -25,43 +25,30 @@ type Service struct {
 	Type       Type
 }
 
-func (service *Service) ContainerFieldType(services Services) ast.Expr {
+func (service *Service) ContainerFieldType(services Services, importMap ImportMap) ast.Expr {
 	scope := service.Scope
 	if scope == ScopeNotSet {
 		scope = ScopeContainer
 	}
 
 	if scope == ScopeContainer && len(service.Arguments) == 0 {
-		return newIdent(service.InterfaceOrLocalEntityPointerType())
+		return newIdent(service.InterfaceOrLocalEntityPointerType(importMap))
 	}
 
-	return service.astFunctionPrototype(services)
+	return service.astFunctionPrototype(services, importMap)
 }
 
-func (service *Service) ContainerFieldTypeWithMap(services Services, importMap ImportMap) ast.Expr {
-	scope := service.Scope
-	if scope == ScopeNotSet {
-		scope = ScopeContainer
-	}
-
-	if scope == ScopeContainer && len(service.Arguments) == 0 {
-		return newIdent(service.InterfaceOrLocalEntityPointerTypeWithMap(importMap))
-	}
-
-	return service.astFunctionPrototypeWithMap(services, importMap)
-}
-
-func (service *Service) InterfaceOrLocalEntityType(services Services, recurse bool) string {
-	localEntityType := service.Type.LocalEntityType()
+func (service *Service) InterfaceOrLocalEntityType(services Services, recurse bool, importMap ImportMap) string {
+	localEntityType := service.Type.LocalEntityType(importMap)
 	if service.Interface != "" {
-		localEntityType = service.Interface.LocalEntityType()
+		localEntityType = service.Interface.LocalEntityType(importMap)
 	}
 
 	if len(service.Arguments) > 0 && recurse {
 		var args []string
 
 		for _, dep := range service.Returns.Dependencies() {
-			ty := services[dep].InterfaceOrLocalEntityType(services, false)
+			ty := services[dep].InterfaceOrLocalEntityType(services, false, importMap)
 			args = append(args, fmt.Sprintf("%s %s", dep, ty))
 		}
 
@@ -74,12 +61,12 @@ func (service *Service) InterfaceOrLocalEntityType(services Services, recurse bo
 	return localEntityType
 }
 
-func (service *Service) InterfaceOrLocalEntityPointerType() string {
+func (service *Service) InterfaceOrLocalEntityPointerType(importMap ImportMap) string {
 	if service.Interface != "" {
-		return service.Interface.LocalEntityType()
+		return service.Interface.LocalEntityType(importMap)
 	}
 
-	return service.Type.LocalEntityPointerType()
+	return service.Type.LocalEntityPointerType(importMap)
 }
 
 func (service *Service) Imports() map[string]string {
@@ -90,50 +77,16 @@ func (service *Service) Imports() map[string]string {
 	}
 
 	if service.Type.PackageName() != "" {
-		imports[service.Type.PackageName()] = service.Type.LocalPackageName()
+		imports[service.Type.PackageName()] = service.Type.LocalPackageName(nil)
 	}
 
 	if service.Interface.PackageName() != "" {
-		imports[service.Interface.PackageName()] = service.Interface.LocalPackageName()
+		imports[service.Interface.PackageName()] = service.Interface.LocalPackageName(nil)
 	}
 
 	return imports
 }
 
-// InterfaceOrLocalEntityTypeWithMap returns the entity type using a resolved import map
-func (service *Service) InterfaceOrLocalEntityTypeWithMap(services Services, recurse bool, importMap ImportMap) string {
-	ty := service.Type
-	if service.Interface != "" {
-		ty = service.Interface
-	}
-
-	localEntityType := ty.LocalEntityTypeWithMap(importMap)
-
-	if len(service.Arguments) > 0 && recurse {
-		var args []string
-
-		for _, dep := range service.Returns.Dependencies() {
-			depType := services[dep].InterfaceOrLocalEntityTypeWithMap(services, false, importMap)
-			args = append(args, fmt.Sprintf("%s %s", dep, depType))
-		}
-
-		args = append(args, service.Arguments.GoArguments()...)
-
-		return fmt.Sprintf("func(%v) %s", strings.Join(args, ", "),
-			localEntityType)
-	}
-
-	return localEntityType
-}
-
-// InterfaceOrLocalEntityPointerTypeWithMap returns the pointer type using a resolved import map
-func (service *Service) InterfaceOrLocalEntityPointerTypeWithMap(importMap ImportMap) string {
-	if service.Interface != "" {
-		return service.Interface.LocalEntityTypeWithMap(importMap)
-	}
-
-	return service.Type.LocalEntityPointerTypeWithMap(importMap)
-}
 
 func (service *Service) SortedProperties() (sortedProperties []*Property) {
 	var propertyNames []string
@@ -186,22 +139,22 @@ func (service *Service) astArguments() *ast.FieldList {
 	return funcParams
 }
 
-func (service *Service) astDependencyArguments(services Services) *ast.FieldList {
+func (service *Service) astDependencyArguments(services Services, importMap ImportMap) *ast.FieldList {
 	funcParams := &ast.FieldList{
 		List: []*ast.Field{},
 	}
 
 	for _, dep := range service.Returns.DependencyNames() {
 		funcParams.List = append(funcParams.List, &ast.Field{
-			Type: newIdent(dep + " " + services[dep].InterfaceOrLocalEntityType(services, false)),
+			Type: newIdent(dep + " " + services[dep].InterfaceOrLocalEntityType(services, false, importMap)),
 		})
 	}
 
 	return funcParams
 }
 
-func (service *Service) astAllArguments(services Services) *ast.FieldList {
-	deps := service.astDependencyArguments(services)
+func (service *Service) astAllArguments(services Services, importMap ImportMap) *ast.FieldList {
+	deps := service.astDependencyArguments(services, importMap)
 	args := service.astArguments()
 
 	return &ast.FieldList{
@@ -209,8 +162,8 @@ func (service *Service) astAllArguments(services Services) *ast.FieldList {
 	}
 }
 
-func (service *Service) astFunctionPrototype(services Services) *ast.FuncType {
-	ty := Type(service.InterfaceOrLocalEntityType(services, true))
+func (service *Service) astFunctionPrototype(services Services, importMap ImportMap) *ast.FuncType {
+	ty := Type(service.InterfaceOrLocalEntityType(services, true, importMap))
 	if ty.IsFunction() {
 		args, returns := ty.parseFunctionType()
 
@@ -221,48 +174,8 @@ func (service *Service) astFunctionPrototype(services Services) *ast.FuncType {
 	}
 
 	return &ast.FuncType{
-		Params:  service.astAllArguments(services),
+		Params:  service.astAllArguments(services, importMap),
 		Results: newFieldList(string(ty)),
-	}
-}
-
-func (service *Service) astFunctionPrototypeWithMap(services Services, importMap ImportMap) *ast.FuncType {
-	ty := Type(service.InterfaceOrLocalEntityTypeWithMap(services, true, importMap))
-	if ty.IsFunction() {
-		args, returns := ty.parseFunctionType()
-
-		return &ast.FuncType{
-			Params:  newFieldList(args),
-			Results: newFieldList(returns...),
-		}
-	}
-
-	return &ast.FuncType{
-		Params:  service.astAllArgumentsWithMap(services, importMap),
-		Results: newFieldList(string(ty)),
-	}
-}
-
-func (service *Service) astDependencyArgumentsWithMap(services Services, importMap ImportMap) *ast.FieldList {
-	funcParams := &ast.FieldList{
-		List: []*ast.Field{},
-	}
-
-	for _, dep := range service.Returns.DependencyNames() {
-		funcParams.List = append(funcParams.List, &ast.Field{
-			Type: newIdent(dep + " " + services[dep].InterfaceOrLocalEntityTypeWithMap(services, false, importMap)),
-		})
-	}
-
-	return funcParams
-}
-
-func (service *Service) astAllArgumentsWithMap(services Services, importMap ImportMap) *ast.FieldList {
-	deps := service.astDependencyArgumentsWithMap(services, importMap)
-	args := service.astArguments()
-
-	return &ast.FieldList{
-		List: append(deps.List, args.List...),
 	}
 }
 
@@ -294,7 +207,7 @@ func (service *Service) astFunctionBody(file *File, services Services, name, ser
 				Lhs: []ast.Expr{newIdent(serviceTempVariable)},
 				Rhs: []ast.Expr{
 					&ast.CompositeLit{
-						Type: newIdent(service.Type.CreateLocalEntityTypeWithMap(file.importMap)),
+						Type: newIdent(service.Type.CreateLocalEntityType(file.importMap)),
 					},
 				},
 			},

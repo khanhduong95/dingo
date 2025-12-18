@@ -47,9 +47,9 @@ func GenerateContainer(all *File, packageName string, outputFile string) (*File,
 	all.importMap = CollectAndResolveImports(all.Services)
 
 	all.file.Decls = append(all.file.Decls,
-		all.Services.astContainerStructWithMap(all.importMap),
+		all.Services.astContainerStruct(all.importMap),
 		all.Services.astDefaultContainer(),
-		all.astNewContainerFuncWithMap())
+		all.astNewContainerFunc())
 
 	for _, serviceName := range all.Services.ServiceNames() {
 		definition := all.Services[serviceName]
@@ -83,7 +83,7 @@ func GenerateContainer(all *File, packageName string, outputFile string) (*File,
 			},
 			Type: &ast.FuncType{
 				Params:  definition.astArguments(),
-				Results: newFieldList(definition.InterfaceOrLocalEntityTypeWithMap(all.Services, false, all.importMap)),
+				Results: newFieldList(definition.InterfaceOrLocalEntityType(all.Services, false, all.importMap)),
 			},
 			Body: definition.astFunctionBody(all, all.Services, serviceName, serviceName),
 		})
@@ -136,23 +136,7 @@ func (file *File) astNewContainerFunc() *ast.FuncDecl {
 	for _, serviceName := range file.Services.ServicesWithScope(ScopePrototype).ServiceNames() {
 		service := file.Services[serviceName]
 		fields[serviceName] = &ast.FuncLit{
-			Type: service.astFunctionPrototype(file.Services),
-			Body: service.astFunctionBody(file, file.Services, "", serviceName),
-		}
-	}
-
-	return newFunc("NewContainer", nil, []string{"*Container"}, newBlock(
-		newReturn(newCompositeLit("&Container", fields)),
-	))
-}
-
-func (file *File) astNewContainerFuncWithMap() *ast.FuncDecl {
-	fields := make(map[string]ast.Expr)
-
-	for _, serviceName := range file.Services.ServicesWithScope(ScopePrototype).ServiceNames() {
-		service := file.Services[serviceName]
-		fields[serviceName] = &ast.FuncLit{
-			Type: service.astFunctionPrototypeWithMap(file.Services, file.importMap),
+			Type: service.astFunctionPrototype(file.Services, file.importMap),
 			Body: service.astFunctionBody(file, file.Services, "", serviceName),
 		}
 	}

@@ -53,21 +53,7 @@ func (ty Type) UnversionedPackageName() string {
 	return strings.Join(packageName, "/")
 }
 
-func (ty Type) LocalPackageName() string {
-	if ty.IsFunction() {
-		return ""
-	}
-
-	pkgNameParts := strings.Split(ty.UnversionedPackageName(), "/")
-	lastPart := pkgNameParts[len(pkgNameParts)-1]
-	if lastPart == "" {
-		lastPart = ty.PackageName()
-	}
-	return strings.Replace(lastPart, "-", "_", -1)
-}
-
-// LocalPackageNameWithMap returns the package name using a resolved import map
-func (ty Type) LocalPackageNameWithMap(importMap ImportMap) string {
+func (ty Type) LocalPackageName(importMap ImportMap) string {
 	if ty.IsFunction() {
 		return ""
 	}
@@ -77,13 +63,18 @@ func (ty Type) LocalPackageNameWithMap(importMap ImportMap) string {
 		return ""
 	}
 
-	// Check if we have a resolved name for this package
-	if resolvedName, ok := importMap[packageName]; ok {
-		return resolvedName
+	if importMap != nil {
+		if resolvedName, ok := importMap[packageName]; ok {
+			return resolvedName
+		}
 	}
 
-	// Fallback to default behavior
-	return ty.LocalPackageName()
+	pkgNameParts := strings.Split(ty.UnversionedPackageName(), "/")
+	lastPart := pkgNameParts[len(pkgNameParts)-1]
+	if lastPart == "" {
+		lastPart = packageName
+	}
+	return strings.Replace(lastPart, "-", "_", -1)
 }
 
 func (ty Type) EntityName() string {
@@ -96,33 +87,22 @@ func (ty Type) EntityName() string {
 	return strings.TrimLeft(parts[len(parts)-1], "*")
 }
 
-func (ty Type) LocalEntityName() string {
+func (ty Type) LocalEntityName(importMap ImportMap) string {
 	if ty.IsFunction() {
 		return ty.String()
 	}
 
-	name := ty.LocalPackageName() + "." + ty.EntityName()
+	name := ty.LocalPackageName(importMap) + "." + ty.EntityName()
 
 	return strings.TrimLeft(name, ".")
 }
 
-// LocalEntityNameWithMap returns the entity name using a resolved import map
-func (ty Type) LocalEntityNameWithMap(importMap ImportMap) string {
+func (ty Type) LocalEntityType(importMap ImportMap) string {
 	if ty.IsFunction() {
 		return ty.String()
 	}
 
-	name := ty.LocalPackageNameWithMap(importMap) + "." + ty.EntityName()
-
-	return strings.TrimLeft(name, ".")
-}
-
-func (ty Type) LocalEntityType() string {
-	if ty.IsFunction() {
-		return ty.String()
-	}
-
-	name := ty.LocalEntityName()
+	name := ty.LocalEntityName(importMap)
 	if ty.IsPointer() {
 		name = "*" + name
 	}
@@ -130,26 +110,12 @@ func (ty Type) LocalEntityType() string {
 	return name
 }
 
-// LocalEntityTypeWithMap returns the entity type using a resolved import map
-func (ty Type) LocalEntityTypeWithMap(importMap ImportMap) string {
+func (ty Type) CreateLocalEntityType(importMap ImportMap) string {
 	if ty.IsFunction() {
 		return ty.String()
 	}
 
-	name := ty.LocalEntityNameWithMap(importMap)
-	if ty.IsPointer() {
-		name = "*" + name
-	}
-
-	return name
-}
-
-func (ty Type) CreateLocalEntityType() string {
-	if ty.IsFunction() {
-		return ty.String()
-	}
-
-	name := ty.LocalEntityName()
+	name := ty.LocalEntityName(importMap)
 	if ty.IsPointer() {
 		name = "&" + name
 	}
@@ -157,40 +123,12 @@ func (ty Type) CreateLocalEntityType() string {
 	return name
 }
 
-// CreateLocalEntityTypeWithMap returns the create syntax using a resolved import map
-func (ty Type) CreateLocalEntityTypeWithMap(importMap ImportMap) string {
+func (ty Type) LocalEntityPointerType(importMap ImportMap) string {
 	if ty.IsFunction() {
 		return ty.String()
 	}
 
-	name := ty.LocalEntityNameWithMap(importMap)
-	if ty.IsPointer() {
-		name = "&" + name
-	}
-
-	return name
-}
-
-func (ty Type) LocalEntityPointerType() string {
-	if ty.IsFunction() {
-		return ty.String()
-	}
-
-	name := ty.LocalEntityName()
-	if !strings.HasPrefix(name, "*") {
-		name = "*" + name
-	}
-
-	return name
-}
-
-// LocalEntityPointerTypeWithMap returns the pointer type using a resolved import map
-func (ty Type) LocalEntityPointerTypeWithMap(importMap ImportMap) string {
-	if ty.IsFunction() {
-		return ty.String()
-	}
-
-	name := ty.LocalEntityNameWithMap(importMap)
+	name := ty.LocalEntityName(importMap)
 	if !strings.HasPrefix(name, "*") {
 		name = "*" + name
 	}

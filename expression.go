@@ -55,7 +55,7 @@ func (e Expression) performSubstitutions(file *File, services Services, fromArgs
 				panic(fmt.Sprintf("service does not exist: %s", i[1]))
 			}
 
-			if _, ok := services[i[1]].ContainerFieldType(services).(*ast.FuncType); ok {
+			if _, ok := services[i[1]].ContainerFieldType(services, nil).(*ast.FuncType); ok {
 				return fmt.Sprintf("container.%s", i[1])
 			}
 

@@ -24,7 +24,7 @@ func CollectAndResolveImports(services Services) ImportMap {
 			// Use default short name if not specified
 			if shortName == "" {
 				ty := Type(packagePath)
-				shortName = ty.LocalPackageName()
+				shortName = ty.LocalPackageName(nil)
 			}
 
 			importsByShortName[shortName] = append(importsByShortName[shortName], packagePath)
