@@ -68,31 +68,6 @@ func (e Expression) performSubstitutions(file *File, services Services, fromArgs
 	return stmt
 }
 
-// replacePackagePrefixes replaces unqualified package names with their resolved aliases
-func (e Expression) replacePackagePrefixes(stmt string, importMap ImportMap) string {
-	// Build a reverse map from short names to resolved names
-	shortToResolved := make(map[string]string)
-
-	for fullPath, resolvedName := range importMap {
-		parts := strings.Split(fullPath, "/")
-		if len(parts) > 0 {
-			defaultShortName := parts[len(parts)-1]
-			defaultShortName = strings.ReplaceAll(defaultShortName, "-", "_")
-
-			if defaultShortName != resolvedName {
-				shortToResolved[defaultShortName] = resolvedName
-			}
-		}
-	}
-
-	for shortName, resolvedName := range shortToResolved {
-		pattern := regexp.MustCompile(`\b` + regexp.QuoteMeta(shortName) + `\.`)
-		stmt = pattern.ReplaceAllString(stmt, resolvedName+".")
-	}
-
-	return stmt
-}
-
 // replacePackagePrefixesWithContext replaces package prefixes with awareness of the service's context
 func (e Expression) replacePackagePrefixesWithContext(stmt string, serviceType Type, importMap ImportMap) string {
 	if serviceType.PackageName() == "" {
